@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Fly Dino</title>
+<style>
+*{box-sizing:border-box;user-select:none}
+body{margin:0;background:#202124;font-family:Arial,sans-serif;display:flex;justify-content:center;align-items:center;min-height:100vh;overflow:hidden}
+#game{position:relative;width:420px;height:700px;max-width:100vw;max-height:100vh;overflow:hidden;background:linear-gradient(#78d3ff,#eefbff);border:4px solid #111}
+#score{position:absolute;top:18px;width:100%;text-align:center;font-size:42px;font-weight:700;color:#fff;text-shadow:3px 3px #222;z-index:10}
+#best{position:absolute;top:70px;width:100%;text-align:center;font-size:18px;font-weight:700;color:#fff;text-shadow:2px 2px #222;z-index:10}
+#power{position:absolute;top:98px;width:100%;text-align:center;font-size:14px;font-weight:700;color:#fff;text-shadow:2px 2px #222;z-index:10}
+#player{position:absolute;width:42px;height:32px;background:#ffd83d;border:3px solid #222;border-radius:50%;left:90px;top:300px;z-index:5}
+#player:after{content:"";position:absolute;width:9px;height:9px;background:#fff;border:2px solid #222;border-radius:50%;right:5px;top:4px}
+.pipe{position:absolute;width:65px;background:#35a936;border:3px solid #185f19}
+.pipe:after{content:"";position:absolute;left:-7px;width:75px;height:25px;background:#42bd42;border:3px solid #185f19}
+.topPipe{top:0}.topPipe:after{bottom:-3px}.bottomPipe{bottom:0}.bottomPipe:after{top:-3px}
+#ground{position:absolute;bottom:0;height:45px;width:100%;background:#d7b15a;border-top:5px solid #9b7a2e;z-index:6}
+#message{position:absolute;inset:0;display:flex;flex-direction:column;justify-content:center;align-items:center;background:rgba(0,0,0,.25);z-index:20;color:white;text-align:center}
+#message h1{font-size:42px;margin:0 0 10px;text-shadow:3px 3px #222}
+#message p{font-size:20px;background:rgba(0,0,0,.55);padding:12px 20px;border-radius:10px}
+button{border:0;padding:14px 30px;font-size:20px;font-weight:bold;border-radius:10px;cursor:pointer;background:#ffcf33}
+</style>
+</head>
+<body>
+<div id="game">
+<div id="score">0</div><div id="best">Kỷ lục: 0</div><div id="player"></div><div id="ground"></div>
+<div id="message"><h1>FLY DINO</h1><p>SPACE / CLICK / CHẠM để bay</p><button onclick="startGame()">CHƠI</button></div>
+</div>
+<script>
+const game=document.getElementById("game"),
+player=document.getElementById("player"),
+scoreText=document.getElementById("score"),
+bestText=document.getElementById("best"),
+message=document.getElementById("message");
+
+let y=300,v=0,score=0,speed=2.5,running=false,over=false,pipes=[],timer=null;
+let best=Number(localStorage.getItem("flyDinoBest")||0);
+
+bestText.textContent="Kỷ lục: "+best;
+
+function startGame(){
+  pipes.forEach(p=>{p.t.remove();p.b.remove();});
+  pipes=[];
+  y=300;v=0;score=0;speed=2.5;
+  scoreText.textContent=0;
+  message.style.display="none";
+  running=true;over=false;
+  clearInterval(timer);
+  timer=setInterval(createPipe,1800);
+  requestAnimationFrame(loop);
+}
+
+function playFlapSound(){
+  try{
+    const AC=window.AudioContext||window.webkitAudioContext;
+    if(!AC)return;
+    if(!window.audioCtx)window.audioCtx=new AC();
+    const ctx=window.audioCtx;
+    if(ctx.state==="suspended")ctx.resume();
+    const osc=ctx.createOscillator(),gain=ctx.createGain();
+    osc.type="sine";
+    osc.frequency.setValueAtTime(880,ctx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(1320,ctx.currentTime+0.07);
+    gain.gain.setValueAtTime(0.0001,ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.16,ctx.currentTime+0.012);
+    gain.gain.exponentialRampToValueAtTime(0.0001,ctx.currentTime+0.11);
+    osc.connect(gain);gain.connect(ctx.destination);
+    osc.start();osc.stop(ctx.currentTime+0.12);
+  }catch(e){}
+}
+
+function flap(){
+  if(!running){startGame();return}
+  if(!over){v=-8;playFlapSound();}
+}
+
+document.addEventListener("keydown",e=>{
+  if(e.code==="Space"){e.preventDefault();flap();}
+});
+game.addEventListener("mousedown",flap);
+game.addEventListener("touchstart",e=>{
+  e.preventDefault();flap();
+},{passive:false});
+
+function createPipe(){
+  if(!running||over)return;
+
+  // Càng chơi lâu càng khó.
+  const difficulty=Math.min(score/45,1);
+  const gap=Math.max(175,215-40*difficulty);
+  const min=95,max=365;
+  const th=Math.floor(Math.random()*(max-min))+min;
+  const bh=700-th-gap-45;
+
+  const t=document.createElement("div");
+  const b=document.createElement("div");
+  t.className="pipe topPipe";
+  b.className="pipe bottomPipe";
+  t.style.height=th+"px";
+  b.style.height=bh+"px";
+  t.style.left=b.style.left="420px";
+  game.append(t,b);
+  pipes.push({t,b,x:420,scored:false});
+}
+
+function hit(el){
+  const a=player.getBoundingClientRect(),b=el.getBoundingClientRect();
+  return !(a.right<b.left||a.left>b.right||a.bottom<b.top||a.top>b.bottom);
+}
+
+function loop(){
+  if(!running)return;
+
+  if(!over){
+    v+=.45;
+    y+=v;
+    player.style.top=y+"px";
+
+    if(y<0||y+32>655){end();return;}
+
+    pipes.forEach(p=>{
+      p.x-=speed;
+      p.t.style.left=p.b.style.left=p.x+"px";
+
+      if(!p.scored&&p.x+65<90){
+        p.scored=true;
+        score++;
+        scoreText.textContent=score;
+        speed=2.5+Math.min(score/18,2.2);
+      }
+
+      if(hit(p.t)||hit(p.b))end();
+    });
+
+    pipes=pipes.filter(p=>{
+      if(p.x<-100){
+        p.t.remove();
+        p.b.remove();
+        return false;
+      }
+      return true;
+    });
+  }
+
+  requestAnimationFrame(loop);
+}
+
+function end(){
+  if(over)return;
+  over=true;
+  running=false;
+  clearInterval(timer);
+  timer=null;
+
+  if(score>best){
+    best=score;
+    localStorage.setItem("flyDinoBest",best);
+    bestText.textContent="Kỷ lục: "+best;
+  }
+
+  message.innerHTML=
+    "<h2>💥 GAME OVER</h2>"+
+    "<p>Điểm: <b>"+score+"</b></p>"+
+    "<p>Kỷ lục: <b>"+best+"</b></p>"+
+    "<button onclick='startGame()'>CHƠI LẠI</button>";
+  message.style.display="flex";
+}
+</script>
+</body>
+</html>
